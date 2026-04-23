@@ -13,6 +13,7 @@ N_CLIENTS="${N_CLIENTS:-4}"
 GLOBAL_EPOCH="${GLOBAL_EPOCH:-30}"
 OUT_DIR="${OUT_DIR:-runs/eps30_compare}"
 EPS_LIST="${EPS_LIST:-0.3 0.5 0.7}"
+MAX_PARALLEL="${MAX_PARALLEL:-0}" # 0 means run all jobs in full parallel
 
 # Keep DLG only on the final round (round index = GLOBAL_EPOCH-1) so that MSE/PSNR correspond to 30 rounds.
 FINAL_DLG_EPOCH=$((GLOBAL_EPOCH - 1))
@@ -24,9 +25,12 @@ echo "==========================================================="
 echo "DP vs FedBARRE @ ${GLOBAL_EPOCH} rounds"
 echo "dataset=${DATASET}, clients=${N_CLIENTS}, gpu=${GPU}, out_dir=${OUT_DIR}"
 echo "eps list: ${EPS_LIST}"
+echo "max parallel jobs: ${MAX_PARALLEL}"
 echo "==========================================================="
 
-for eps in $EPS_LIST; do
+run_one() {
+  local eps="$1"
+
   echo ""
   echo "[EPS=${eps}] Running DP-Laplace ..."
   python main.py \
@@ -49,8 +53,18 @@ for eps in $EPS_LIST; do
     --name "barre_eps${eps}" \
     --nfl "eps=${eps},privacy=barre,distort=barre,barre_noise_type=2,barre_M=5,barre_tau=1.0,${COMMON_CFG}" \
     --use_rp False
+}
 
+for eps in $EPS_LIST; do
+  if [[ "$MAX_PARALLEL" -gt 0 ]]; then
+    while [[ "$(jobs -pr | wc -l)" -ge "$MAX_PARALLEL" ]]; do
+      sleep 1
+    done
+  fi
+  run_one "$eps" &
 done
+
+wait
 
 echo ""
 echo "================ Summary (round ${GLOBAL_EPOCH}) ================"
