@@ -8,6 +8,7 @@ import yaml
 import time
 import os
 import pickle as pk
+import sys
 import torch
 from fl.client import Client, params_norm, dp_scale_laplace, get_delta_norm_by_eps
 from fl.server import Server
@@ -262,6 +263,9 @@ def fed_train():
         # ===2.2 start one global epoch (n_batch)
         best_val_acc_global, best_te_acc_global = 0,0
 
+        n_batches = len(train_loader_list[0]) if train_loader_list else 0
+        progress_interval = max(1, n_batches // 10) if n_batches else 1
+
         for batch_idx, clients_batch_data in enumerate(zip(*train_loader_list)):# 开始客户端训练
             # ===2.2.1: client sequential train
             for client_idx, c_batch_data in enumerate(clients_batch_data):  # 每个客户端的批次数据
@@ -366,6 +370,12 @@ def fed_train():
             server.send()
             comm_R += 1
 
+            if n_batches and ((batch_idx + 1) % progress_interval == 0 or batch_idx + 1 == n_batches):
+                logger.info(
+                    "epoch %d progress: %d/%d batches finished, communication round:%d",
+                    train_epoch_round, batch_idx + 1, n_batches, comm_R
+                )
+
         val_acc_global, te_acc_global = server.eval_global('val'), server.eval_global('test')
         tb_writer.add_scalar(f'global/val_acc', val_acc_global, train_epoch_round)
         tb_writer.add_scalar(f'global/test_acc', te_acc_global, train_epoch_round)
@@ -407,6 +417,6 @@ def fed_train():
 if __name__ == "__main__":
     try:
         fed_train()
-    except Exception as e:
-        msg = traceback.format_exc()
-        logger.exception(msg)
+    except Exception:
+        logger.exception("Training failed")
+        sys.exit(1)

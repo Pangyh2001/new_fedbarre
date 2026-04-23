@@ -7,6 +7,7 @@ set -euo pipefail
 # Optional env vars:
 #   GPU=0 DATASET=mnist N_CLIENTS=4 EPS_LIST="0.3 0.5 0.7" OUT_DIR=runs/eps30_compare
 #   GPU_LIST="0 1" MAX_PARALLEL=2
+#   DATA_PER_CLIENT=1000 B=8 DLG_ITER=1600
 
 GPU="${GPU:-0}"
 GPU_LIST="${GPU_LIST:-$GPU}" # e.g. "0 1 2" or "0,1,2"
@@ -16,11 +17,14 @@ GLOBAL_EPOCH="${GLOBAL_EPOCH:-30}"
 OUT_DIR="${OUT_DIR:-runs/eps30_compare}"
 EPS_LIST="${EPS_LIST:-0.3 0.5 0.7}"
 MAX_PARALLEL="${MAX_PARALLEL:-0}" # 0 means auto (= number of visible GPUs from GPU_LIST)
+DATA_PER_CLIENT="${DATA_PER_CLIENT:-1000}"
+B="${B:-8}"
+DLG_ITER="${DLG_ITER:-1600}"
 
 
 # Keep DLG only on the final round (round index = GLOBAL_EPOCH-1) so that MSE/PSNR correspond to 30 rounds.
 FINAL_DLG_EPOCH=$((GLOBAL_EPOCH - 1))
-COMMON_CFG="data_per_client=1000,dlg=True,known_grad=noisy,dlg_attack_epochs=${FINAL_DLG_EPOCH},warm_up_rounds=0"
+COMMON_CFG="data_per_client=${DATA_PER_CLIENT},B=${B},dlg=True,known_grad=noisy,dlg_iter=${DLG_ITER},dlg_attack_epochs=${FINAL_DLG_EPOCH},warm_up_rounds=0"
 
 mkdir -p "$OUT_DIR"
 
@@ -58,6 +62,7 @@ run_one() {
       --out_dir "$OUT_DIR" \
       --name "dp_eps${eps}" \
       --nfl "eps=${eps},privacy=dp,distort=dp-laplace,clipDP=1.0,${COMMON_CFG}" \
+      --v \
       --use_rp False
   else
     echo "[EPS=${eps}] Running FedBARRE on GPU ${run_gpu} ..."
@@ -69,6 +74,7 @@ run_one() {
       --out_dir "$OUT_DIR" \
       --name "barre_eps${eps}" \
       --nfl "eps=${eps},privacy=barre,distort=barre,barre_noise_type=2,barre_M=5,barre_tau=1.0,${COMMON_CFG}" \
+      --v \
       --use_rp False
   fi
 }

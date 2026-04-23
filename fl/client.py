@@ -663,6 +663,9 @@ class Client:
             else:
                 train_model = copy.deepcopy(model_list[m - 1])
 
+            for param in train_model.parameters():
+                param.requires_grad_(True)
+
             if self.model_optim == "adam":
                 optimizer = optim.Adam(train_model.parameters(), lr=self.local_lr, weight_decay=self.weight_decay)
             elif self.model_optim == "sgd":
@@ -736,7 +739,7 @@ class Client:
         self.model.load_state_dict(mixed_state_dict)
 
         # 计算加噪后的梯度（用于隐私分析）
-        self.model.train()
+        self.frozen_net(False)
         self.model.zero_grad()
 
         # raw grad from mixed model (更贴近攻击者真实可见上传)
@@ -752,7 +755,7 @@ class Client:
         _noisy_grad_ = [g.detach().clone() for g in noisy_grad]
         noisy_grad_list.append(_noisy_grad_)
 
-        self.model.eval()
+        self.frozen_net(True)
 
         return loss_val_list, acc_val_list, grad_list, noisy_grad_list
 

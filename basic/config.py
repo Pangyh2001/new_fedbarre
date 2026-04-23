@@ -47,7 +47,7 @@ def extract_nfl_config(args):
     nfl_cfg.cost_fn = cfg_dict.get('cost_fn', 'sim')
     nfl_cfg.dlg_optim = cfg_dict.get('dlg_optim', 'lbf')
     nfl_cfg.dlg_img_init = cfg_dict.get('dlg_img_init', 'randn')
-    nfl_cfg.dlg_iter = cfg_dict.get('dlg_iter', 16000)  # 900, 1600, 2500
+    nfl_cfg.dlg_iter = cfg_dict.get('dlg_iter', 1600)  # 900, 1600, 2500
     nfl_cfg.dlg_lr = cfg_dict.get('dlg_lr', 0.01)
     nfl_cfg.tv_lambda = float(cfg_dict.get('tv_lambda', 1e-5))
 
@@ -75,9 +75,10 @@ def extract_nfl_config(args):
     # BARRE algorithm parameters
 
     nfl_cfg.barre_M = int(cfg_dict.get('barre_M', 3))  # 学习器数量   # Todo 需要修改
-    nfl_cfg.barre_noise_type = int(cfg_dict.get('barre_noise_type', 4))  # 噪声类型 (0=不加噪声, 1=普通噪声, 2=优化噪声)
-    nfl_cfg.barre_k_noise = int(cfg_dict.get('barre_k_noise', 3))  # 噪声优化迭代次数
+    nfl_cfg.barre_noise_type = int(cfg_dict.get('barre_noise_type', 2))  # 噪声类型 (0=不加噪声, 1=普通噪声, 2=优化噪声)
+    nfl_cfg.barre_k_noise = int(cfg_dict.get('barre_k_noise', 5))  # 噪声优化迭代次数
     nfl_cfg.barre_alpha_noise = float(cfg_dict.get('barre_alpha_noise', 0.01))  # 噪声优化学习率
+    nfl_cfg.barre_tau = float(cfg_dict.get('barre_tau', 1.0))  # 梯度/模型混合的温度参数
 
 
     args.nfl = nfl_cfg
