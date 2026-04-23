@@ -8,12 +8,13 @@ set -euo pipefail
 #   GPU=0 DATASET=mnist N_CLIENTS=4 EPS_LIST="0.3 0.5 0.7" OUT_DIR=runs/eps30_compare
 
 GPU="${GPU:-0}"
+GPU_LIST="${GPU_LIST:-$GPU}" # e.g. "0 1 2" or "0,1,2"
 DATASET="${DATASET:-mnist}"
 N_CLIENTS="${N_CLIENTS:-4}"
 GLOBAL_EPOCH="${GLOBAL_EPOCH:-30}"
 OUT_DIR="${OUT_DIR:-runs/eps30_compare}"
 EPS_LIST="${EPS_LIST:-0.3 0.5 0.7}"
-MAX_PARALLEL="${MAX_PARALLEL:-0}" # 0 means run all jobs in full parallel
+
 
 # Keep DLG only on the final round (round index = GLOBAL_EPOCH-1) so that MSE/PSNR correspond to 30 rounds.
 FINAL_DLG_EPOCH=$((GLOBAL_EPOCH - 1))
@@ -21,9 +22,20 @@ COMMON_CFG="data_per_client=1000,dlg=True,known_grad=noisy,dlg_attack_epochs=${F
 
 mkdir -p "$OUT_DIR"
 
+IFS=', ' read -r -a GPU_ARR <<< "$GPU_LIST"
+if [[ "${#GPU_ARR[@]}" -eq 0 ]]; then
+  GPU_ARR=("$GPU")
+fi
+if [[ "$MAX_PARALLEL" -eq 0 ]]; then
+  MAX_PARALLEL="${#GPU_ARR[@]}"
+fi
+if [[ "$MAX_PARALLEL" -lt 1 ]]; then
+  MAX_PARALLEL=1
+fi
+
 echo "==========================================================="
 echo "DP vs FedBARRE @ ${GLOBAL_EPOCH} rounds"
-echo "dataset=${DATASET}, clients=${N_CLIENTS}, gpu=${GPU}, out_dir=${OUT_DIR}"
+echo "dataset=${DATASET}, clients=${N_CLIENTS}, gpu_list=${GPU_LIST}, out_dir=${OUT_DIR}"
 echo "eps list: ${EPS_LIST}"
 echo "max parallel jobs: ${MAX_PARALLEL}"
 echo "==========================================================="
@@ -31,40 +43,6 @@ echo "==========================================================="
 run_one() {
   local eps="$1"
 
-  echo ""
-  echo "[EPS=${eps}] Running DP-Laplace ..."
-  python main.py \
-    --dataset "$DATASET" \
-    --n_clients "$N_CLIENTS" \
-    --global_epoch "$GLOBAL_EPOCH" \
-    --gpu "$GPU" \
-    --out_dir "$OUT_DIR" \
-    --name "dp_eps${eps}" \
-    --nfl "eps=${eps},privacy=dp,distort=dp-laplace,clipDP=1.0,${COMMON_CFG}" \
-    --use_rp False
-
-  echo "[EPS=${eps}] Running FedBARRE ..."
-  python main.py \
-    --dataset "$DATASET" \
-    --n_clients "$N_CLIENTS" \
-    --global_epoch "$GLOBAL_EPOCH" \
-    --gpu "$GPU" \
-    --out_dir "$OUT_DIR" \
-    --name "barre_eps${eps}" \
-    --nfl "eps=${eps},privacy=barre,distort=barre,barre_noise_type=2,barre_M=5,barre_tau=1.0,${COMMON_CFG}" \
-    --use_rp False
-}
-
-for eps in $EPS_LIST; do
-  if [[ "$MAX_PARALLEL" -gt 0 ]]; then
-    while [[ "$(jobs -pr | wc -l)" -ge "$MAX_PARALLEL" ]]; do
-      sleep 1
-    done
-  fi
-  run_one "$eps" &
-done
-
-wait
 
 echo ""
 echo "================ Summary (round ${GLOBAL_EPOCH}) ================"
