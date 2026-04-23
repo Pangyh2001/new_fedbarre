@@ -69,9 +69,10 @@ def extract_nfl_config(args):
     # BARRE algorithm parameters
 
     nfl_cfg.barre_M = int(cfg_dict.get('barre_M', 3))  # 学习器数量
-    nfl_cfg.barre_noise_type = int(cfg_dict.get('barre_noise_type', 4))  # 噪声类型 (0=不加噪声, 1=随机双区间噪声, 2=优化对抗噪声)
+    nfl_cfg.barre_noise_type = int(cfg_dict.get('barre_noise_type', 2))  # 噪声类型 (0=不加噪声, 1=随机双区间噪声, 2=优化对抗噪声)
     nfl_cfg.barre_k_noise = int(cfg_dict.get('barre_k_noise', 5))  # 噪声优化迭代次数 (对应add_op_noise的opt_steps)
     nfl_cfg.barre_alpha_noise = float(cfg_dict.get('barre_alpha_noise', 0.01))  # 噪声优化学习率 (对应add_op_noise的lr)
+    nfl_cfg.barre_tau = float(cfg_dict.get('barre_tau', 1.0))  # 梯度/模型混合的温度参数 τ
 
 
 

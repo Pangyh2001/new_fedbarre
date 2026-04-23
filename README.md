@@ -41,3 +41,25 @@ DP.sh是DP算法的代码
 python main.py --nfl "eps=0.1, privacy=nfl, distort=nfl,clipDP=1.0" --out_dir "./runs_nfl" --local_epoch 1 --global_epoch 100 --use_rp False
 ```
 fednfl.sh是fednfl的代码。
+## 一键对比 DP vs FedBARRE（30轮，多个 epsilon）
+
+新增脚本：`run_dp_vs_fedbarre_eps30.sh`
+
+```bash
+bash run_dp_vs_fedbarre_eps30.sh
+```
+
+默认会在 `mnist` 上跑 `eps=0.3 0.5 0.7`，每个 eps 依次运行：
+- DP-Laplace
+- FedBARRE（`barre_M=5`, `barre_noise_type=2`, `barre_tau=1.0`）
+
+并在 30 轮（round index 29）结束后，自动打印每个 eps 的：
+- `test_acc`
+- `mse`
+- `psnr`
+
+可选环境变量（示例）：
+
+```bash
+GPU=0 DATASET=mnist N_CLIENTS=4 EPS_LIST="0.2 0.4 0.6 0.8" OUT_DIR=runs/eps30_compare bash run_dp_vs_fedbarre_eps30.sh
+```

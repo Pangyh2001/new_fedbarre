@@ -624,12 +624,14 @@ class Client:
             self.frozen_net(True)
         return loss_val_list, acc_val_list, grad_list, noisy_grad_list
 
-    def perform_barre_train(self, x, y, comm_R, l, u, M=3, clipDP=-1, noise_type=1, k_noise=5, alpha_noise=0.01, loss_weight=0.5):
+    def perform_barre_train(self, x, y, comm_R, l, u, M=3, clipDP=-1, noise_type=1, k_noise=5, alpha_noise=0.01, loss_weight=0.5, tau=1.0):
         """
         BARRE算法训练过程（对应论文Algorithm 2: ClientBatchGrad）
 
-        对每个mini-batch训练M个学习器（链式继承），通过验证集选择最优分类器，
-        返回选中分类器的梯度用于服务器聚合。
+        对每个mini-batch训练M个学习器（链式继承），并基于验证集损失计算软权重 α，
+        使用 softmax(-L_val / τ) 进行“混合上传”。
+        由于本仓库采用 FedAvg 的参数聚合（而不是直接上传梯度），这里用 α 对 M 个学习器参数做线性混合，
+        得到等价的“混合后本地模型”用于服务器聚合。
 
         参数:
         - x: 输入数据
@@ -642,6 +644,7 @@ class Client:
         - k_noise: 噪声优化迭代次数 (对应add_op_noise的opt_steps)
         - alpha_noise: 噪声优化学习率 (对应add_op_noise的lr)
         - loss_weight: 原始损失与噪声损失的权重平衡因子 (论文中的λ)
+        - tau: 软权重温度参数 τ，越大越接近均匀混合
 
         返回:
         - loss_val_list, acc_val_list, grad_list, noisy_grad_list
@@ -710,13 +713,37 @@ class Client:
             self.tb_writer.add_scalar(f'C{self.id}/barre_classifier_{m}_val_total_loss', val_total_loss, comm_R)
             model_list.append(train_model)
 
-        best_model_index = np.argmin(total_loss_list)
-        self.model = copy.deepcopy(model_list[best_model_index])
-        self.tb_writer.add_scalar(f'C{self.id}/barre_best_classifier', best_model_index, comm_R)
+        # ====== FedBARRE核心改动：由“选最优单模型”改为“软权重混合” ======
+        val_losses_tensor = torch.tensor(total_loss_list, device=device, dtype=torch.float32)
+        tau_safe = max(float(tau), 1e-6)
+        alpha = torch.softmax(-val_losses_tensor / tau_safe, dim=0)
+        alpha_cpu = alpha.detach().cpu().numpy()
+
+        # 记录混合权重与熵（用于观察是否接近硬选择）
+        for m, a_m in enumerate(alpha_cpu):
+            self.tb_writer.add_scalar(f'C{self.id}/barre_alpha_{m}', float(a_m), comm_R)
+        alpha_entropy = float(-(alpha * torch.log(alpha + 1e-12)).sum().item())
+        self.tb_writer.add_scalar(f'C{self.id}/barre_alpha_entropy', alpha_entropy, comm_R)
+        self.tb_writer.add_scalar(f'C{self.id}/barre_tau', tau_safe, comm_R)
+
+        # 参数线性混合：theta_mix = sum_m alpha_m * theta_m
+        mixed_state_dict = copy.deepcopy(model_list[0].state_dict())
+        with torch.no_grad():
+            for key in mixed_state_dict.keys():
+                mixed_state_dict[key] = mixed_state_dict[key].detach().clone() * 0.0
+                for m in range(M):
+                    mixed_state_dict[key].add_(model_list[m].state_dict()[key] * alpha[m])
+        self.model.load_state_dict(mixed_state_dict)
 
         # 计算加噪后的梯度（用于隐私分析）
         self.model.train()
         self.model.zero_grad()
+
+        # raw grad from mixed model (更贴近攻击者真实可见上传)
+        final_pred = self.model(x)
+        final_loss = self.CE_criterion(final_pred, y)
+        final_grad = torch.autograd.grad(final_loss, self.model.parameters(), retain_graph=True)
+        grad_list = [[g.detach().clone() for g in final_grad]]
 
         x_final_noisy, _ = self._apply_noise(x, y, self.model, l, u, noise_type, k_noise, alpha_noise)
         noisy_pred = self.model(x_final_noisy)

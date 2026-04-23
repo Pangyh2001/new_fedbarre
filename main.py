@@ -294,7 +294,8 @@ def fed_train():
                         loss_list, acc_list, grad_list, noisy_grad_list = clients[client_idx].\
                             perform_barre_train(x, y, comm_R, l=l, u=u,
                                             M=args.nfl.barre_M, clipDP=args.nfl.clipDP,noise_type=args.nfl.barre_noise_type,
-                                            k_noise=args.nfl.barre_k_noise, alpha_noise=args.nfl.barre_alpha_noise)
+                                            k_noise=args.nfl.barre_k_noise, alpha_noise=args.nfl.barre_alpha_noise,
+                                            tau=args.nfl.barre_tau)
                     elif args.nfl.apply_distortion == 'nfl':  # nfl算法
                         loss_list, acc_list, grad_list, noisy_grad_list = clients[client_idx]. \
                             perform_nfl_train(x, y, comm_R, l, u, warming_up=False,
