@@ -17,6 +17,7 @@ OUT_DIR="${OUT_DIR:-runs/eps30_compare}"
 EPS_LIST="${EPS_LIST:-0.3 0.5 0.7}"
 MAX_PARALLEL="${MAX_PARALLEL:-0}" # 0 means auto (= number of visible GPUs from GPU_LIST)
 
+
 # Keep DLG only on the final round (round index = GLOBAL_EPOCH-1) so that MSE/PSNR correspond to 30 rounds.
 FINAL_DLG_EPOCH=$((GLOBAL_EPOCH - 1))
 COMMON_CFG="data_per_client=1000,dlg=True,known_grad=noisy,dlg_attack_epochs=${FINAL_DLG_EPOCH},warm_up_rounds=0"
