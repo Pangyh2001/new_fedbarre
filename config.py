@@ -34,7 +34,13 @@ def extract_nfl_config(args):
     args.shuffle = cfg_dict.get('shuffle', True)
 
     # dlg parameters
-    nfl_cfg.dlg_attack_epochs = list(map(int, cfg_dict.get('dlg_attack_epochs', '8-9-10').split('-'))) #TODO dlg攻击的轮次
+    dlg_attack_epochs = cfg_dict.get('dlg_attack_epochs', '8-9-10')
+    if isinstance(dlg_attack_epochs, str):
+        nfl_cfg.dlg_attack_epochs = [int(x) for x in dlg_attack_epochs.split('-') if str(x).strip() != '']
+    elif isinstance(dlg_attack_epochs, (list, tuple)):
+        nfl_cfg.dlg_attack_epochs = [int(x) for x in dlg_attack_epochs]
+    else:
+        nfl_cfg.dlg_attack_epochs = [int(dlg_attack_epochs)]  # 支持传单个整数轮次
     nfl_cfg.apply_dlg = cfg_dict.get('dlg', True)
     nfl_cfg.dlg_know_grad = cfg_dict.get('known_grad', 'noisy')  # raw / noisy / equiv / updates
     nfl_cfg.label_guess = cfg_dict.get('label_guess', True)  # True/False
