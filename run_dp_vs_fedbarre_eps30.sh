@@ -6,6 +6,7 @@ set -euo pipefail
 #   bash run_dp_vs_fedbarre_eps30.sh
 # Optional env vars:
 #   GPU=0 DATASET=mnist N_CLIENTS=4 EPS_LIST="0.3 0.5 0.7" OUT_DIR=runs/eps30_compare
+#   GPU_LIST="0 1" MAX_PARALLEL=2
 
 GPU="${GPU:-0}"
 GPU_LIST="${GPU_LIST:-$GPU}" # e.g. "0 1 2" or "0,1,2"
@@ -14,6 +15,7 @@ N_CLIENTS="${N_CLIENTS:-4}"
 GLOBAL_EPOCH="${GLOBAL_EPOCH:-30}"
 OUT_DIR="${OUT_DIR:-runs/eps30_compare}"
 EPS_LIST="${EPS_LIST:-0.3 0.5 0.7}"
+MAX_PARALLEL="${MAX_PARALLEL:-0}" # 0 means auto (= number of visible GPUs from GPU_LIST)
 
 
 # Keep DLG only on the final round (round index = GLOBAL_EPOCH-1) so that MSE/PSNR correspond to 30 rounds.
@@ -42,7 +44,75 @@ echo "==========================================================="
 
 run_one() {
   local eps="$1"
+  local method="$2"   # dp | barre
+  local run_gpu="$3"
 
+  echo ""
+  if [[ "$method" == "dp" ]]; then
+    echo "[EPS=${eps}] Running DP-Laplace on GPU ${run_gpu} ..."
+    python main.py \
+      --dataset "$DATASET" \
+      --n_clients "$N_CLIENTS" \
+      --global_epoch "$GLOBAL_EPOCH" \
+      --gpu "$run_gpu" \
+      --out_dir "$OUT_DIR" \
+      --name "dp_eps${eps}" \
+      --nfl "eps=${eps},privacy=dp,distort=dp-laplace,clipDP=1.0,${COMMON_CFG}" \
+      --use_rp False
+  else
+    echo "[EPS=${eps}] Running FedBARRE on GPU ${run_gpu} ..."
+    python main.py \
+      --dataset "$DATASET" \
+      --n_clients "$N_CLIENTS" \
+      --global_epoch "$GLOBAL_EPOCH" \
+      --gpu "$run_gpu" \
+      --out_dir "$OUT_DIR" \
+      --name "barre_eps${eps}" \
+      --nfl "eps=${eps},privacy=barre,distort=barre,barre_noise_type=2,barre_M=5,barre_tau=1.0,${COMMON_CFG}" \
+      --use_rp False
+  fi
+}
+
+job_pids=()
+job_desc=()
+job_fail=0
+gpu_idx=0
+
+launch_job() {
+  local eps="$1"
+  local method="$2"
+  local assigned_gpu="${GPU_ARR[$((gpu_idx % ${#GPU_ARR[@]}))]}"
+  gpu_idx=$((gpu_idx + 1))
+
+  run_one "$eps" "$method" "$assigned_gpu" &
+  job_pids+=("$!")
+  job_desc+=("eps=${eps},method=${method},gpu=${assigned_gpu}")
+}
+
+wait_slot() {
+  while [[ "$(jobs -pr | wc -l)" -ge "$MAX_PARALLEL" ]]; do
+    sleep 1
+  done
+}
+
+for eps in $EPS_LIST; do
+  wait_slot
+  launch_job "$eps" "dp"
+  wait_slot
+  launch_job "$eps" "barre"
+done
+
+for i in "${!job_pids[@]}"; do
+  if ! wait "${job_pids[$i]}"; then
+    echo "[ERROR] job failed: ${job_desc[$i]}"
+    job_fail=1
+  fi
+done
+
+if [[ "$job_fail" -ne 0 ]]; then
+  echo "[ERROR] One or more runs failed; skip summary."
+  exit 1
+fi
 
 echo ""
 echo "================ Summary (round ${GLOBAL_EPOCH}) ================"
